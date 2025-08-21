@@ -25,7 +25,7 @@ import re
     "furryhm",
     "广告助手，帮助你向所有群聊定时发送广告",
     "v1.0.0",
-    "https://github.com/furryhm/astrbot_plugin_furry_dsgg",
+    "https://github.com/furryHM-mrz/astrbot_plugin_furry_dsgg",
 )
 class NobotPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
