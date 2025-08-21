@@ -101,11 +101,9 @@
 ## 注意事项
 
 1. 只有管理员可以管理广告内容和设置定时任务
-
 2. 定时任务精确到分钟级别
-
 3. 发送广告时会随机选择一条广告内容
-
 4. 为避免被举报，建议合理设置发送频率
 
-   # 基于astrbot_plugin_broadcast插件改的
+插件部分代码采用[broadcast](https://github.com/Zhalslar/astrbot_plugin_broadcast)插件的
+
