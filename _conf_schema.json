@@ -1,0 +1,8 @@
+{   
+    "disable_gids": {
+        "description": "关闭广告的群聊",
+        "type": "list",
+        "hint": "关闭广告的群聊将不再接收广告消息",
+        "default": []
+    }
+}
