@@ -24,7 +24,7 @@ import re
     "astrbot_plugin_furry_dsgg",
     "furryhm",
     "广告助手，帮助你向所有群聊定时发送广告",
-    "v1.0.0",
+    "v1.0.2",
     "https://github.com/furryHM-mrz/astrbot_plugin_furry_dsgg",
 )
 class NobotPlugin(Star):
@@ -36,8 +36,16 @@ class NobotPlugin(Star):
         self.context = context
         self.advertisements = []
         self.load_advertisements()
-        self.broadcast_task = None
         self.scheduled_times = []  # 存储定时时间列表
+        self.bot = None  # 保存bot实例
+        self.broadcast_task = None  # 定时任务
+        
+        # 加载定时任务时间点
+        self.load_scheduled_times()
+        
+        # 如果有定时任务时间点，则启动定时任务
+        if self.scheduled_times:
+            self.broadcast_task = asyncio.create_task(self._scheduled_broadcast())
 
     def load_advertisements(self):
         """加载已保存的广告内容"""
@@ -59,6 +67,31 @@ class NobotPlugin(Star):
                 json.dump(self.advertisements, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"保存广告内容时出错: {e}")
+
+    def load_scheduled_times(self):
+        """加载已保存的定时任务时间点"""
+        try:
+            if os.path.exists("data/furry_dsgg_schedule.json"):
+                with open("data/furry_dsgg_schedule.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.scheduled_times = [time(t["hour"], t["minute"]) for t in data.get("scheduled_times", [])]
+            else:
+                self.scheduled_times = []
+        except Exception as e:
+            logger.error(f"加载定时任务时间点时出错: {e}")
+            self.scheduled_times = []
+
+    def save_scheduled_times(self):
+        """保存定时任务时间点到文件"""
+        try:
+            os.makedirs("data", exist_ok=True)
+            data = {
+                "scheduled_times": [{"hour": t.hour, "minute": t.minute} for t in self.scheduled_times]
+            }
+            with open("data/furry_dsgg_schedule.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"保存定时任务时间点时出错: {e}")
 
     async def get_able_gids(self, client: CQHttp) -> list[str] | None:
         all_groups = await client.get_group_list()
@@ -138,6 +171,10 @@ class NobotPlugin(Star):
     @filter.command("广告群列表")
     async def broadcast_list(self, event: AiocqhttpMessageEvent):
         """查看将要向哪些群广告"""
+        # 保存bot实例
+        if self.bot is None:
+            self.bot = event.bot
+            
         all_groups = await event.bot.get_group_list()
         all_groups.sort(key=lambda x: x["group_id"])
         able_gids_str = []
@@ -159,6 +196,10 @@ class NobotPlugin(Star):
     @filter.command("添加广告")
     async def add_advertisement(self, event: AiocqhttpMessageEvent):
         """添加广告内容"""
+        # 保存bot实例
+        if self.bot is None:
+            self.bot = event.bot
+            
         yield event.plain_result("请30秒内发送要添加的广告内容")
 
         @session_waiter(timeout=30, record_history_chains=True)  # type: ignore
@@ -224,12 +265,82 @@ class NobotPlugin(Star):
         yield event.plain_result("\n".join(ad_list))
 
     @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("查看广告")
+    async def view_advertisement(self, event: AiocqhttpMessageEvent, ad_id: int):
+        """查看指定ID的广告内容"""
+        for ad in self.advertisements:
+            if ad["id"] == ad_id:
+                # 构造完整的消息文本
+                basic_info = f"广告ID: {ad_id}\n创建时间: {ad['created_at']}\n内容:\n"
+                
+                # 发送基本信息和内容摘要
+                content_info = self._get_content_info(ad["content"])
+                await event.send(event.make_result().message(basic_info + content_info))
+                
+                # 尝试发送原始广告内容
+                try:
+                    if self.bot is not None:
+                        await self.bot.send_group_msg(
+                            group_id=int(event.get_group_id()),
+                            message=ad["content"]
+                        )
+                    else:
+                        # 如果bot未初始化，保存bot实例并使用它发送
+                        self.bot = event.bot
+                        await self.bot.send_group_msg(
+                            group_id=int(event.get_group_id()),
+                            message=ad["content"]
+                        )
+                except Exception as e:
+                    logger.error(f"发送广告内容时出错: {e}")
+                    # 根据错误类型提供不同的提示
+                    if "Timeout" in str(e):
+                        await event.send(event.make_result().message("提示：广告内容发送超时，可能是网络不稳定或QQ客户端无响应，请稍后重试"))
+                    else:
+                        await event.send(event.make_result().message("提示：广告内容发送失败，可能包含不支持的元素"))
+                
+                event.stop_event()
+                return
+        yield event.plain_result(f"未找到广告 ID: {ad_id}")
+
+    def _get_content_info(self, content):
+        """获取广告内容的信息摘要"""
+        try:
+            if isinstance(content, list):
+                info_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        item_type = item.get("type", "unknown")
+                        if item_type == "text":
+                            # 限制文本预览长度
+                            text_content = item.get('data', {}).get('text', '')
+                            if len(text_content) > 50:
+                                text_content = text_content[:50] + "..."
+                            info_parts.append(f"[文字:{text_content}]")
+                        elif item_type == "image":
+                            info_parts.append("[图片]")
+                        else:
+                            info_parts.append(f"[{item_type}]")
+                    else:
+                        info_parts.append("[未知内容]")
+                return ", ".join(info_parts) if info_parts else "空内容"
+            else:
+                return f"内容类型: {type(content).__name__}"
+        except Exception as e:
+            logger.error(f"解析内容信息时出错: {e}")
+            return "无法解析内容信息"
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("定时广告")
     async def schedule_advertisement(self, event: AiocqhttpMessageEvent, time_str: str = None):
         """
         设置定时广告发送，time_str为具体时间格式，如 09:00,14:30 表示在上午9点和下午2点半发送
         如果不提供参数，则显示当前设置的定时时间
         """
+        # 保存bot实例
+        if self.bot is None:
+            self.bot = event.bot
+            
         if not time_str:
             if not self.scheduled_times:
                 yield event.plain_result("当前未设置定时广告时间，使用方法：/定时广告 09:00,14:30")
@@ -255,6 +366,9 @@ class NobotPlugin(Star):
         parsed_times = sorted(list(set(parsed_times)))
         self.scheduled_times = parsed_times
         
+        # 保存定时任务时间点
+        self.save_scheduled_times()
+        
         # 停止现有的定时任务
         if self.broadcast_task and not self.broadcast_task.done():
             self.broadcast_task.cancel()
@@ -274,6 +388,8 @@ class NobotPlugin(Star):
         if self.broadcast_task and not self.broadcast_task.done():
             self.broadcast_task.cancel()
             self.scheduled_times = []
+            # 保存空的定时任务时间点
+            self.save_scheduled_times()
             yield event.plain_result("已停止定时广告发送")
         else:
             yield event.plain_result("当前没有正在运行的定时广告任务")
@@ -295,7 +411,10 @@ class NobotPlugin(Star):
                         ad = random.choice(self.advertisements)
                         
                         # 获取可广告的群组
-                        client = self.context.platform_manager.get_platform_instance("aiocqhttp").bot
+                        if self.bot is None:
+                            logger.error("Bot实例未初始化")
+                            break
+                        client = self.bot
                         able_gids = await self.get_able_gids(client)
                         if not able_gids:
                             continue
