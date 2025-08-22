@@ -411,10 +411,16 @@ class NobotPlugin(Star):
                         ad = random.choice(self.advertisements)
                         
                         # 获取可广告的群组
-                        if self.bot is None:
-                            logger.error("Bot实例未初始化")
+                        # 修复bot实例未初始化的问题
+                        # 尝试从context获取bot实例
+                        bots = self.context.platform_manager.get_platforms()
+                        if not bots:
+                            logger.error("未找到可用的bot实例")
                             break
-                        client = self.bot
+                            
+                        # 使用第一个可用的bot实例
+                        bot_instance = list(bots.values())[0].bot
+                        client = bot_instance
                         able_gids = await self.get_able_gids(client)
                         if not able_gids:
                             continue
