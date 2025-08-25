@@ -1,7 +1,7 @@
 import asyncio
 
 from aiocqhttp import CQHttp
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star, register, StarTools
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
@@ -12,7 +12,7 @@ from astrbot.core.utils.session_waiter import (
     session_waiter,
     SessionController,
 )
-from astrbot import logger
+from astrbot.api import logger
 import random
 import json
 import os
@@ -24,7 +24,7 @@ import re
     "astrbot_plugin_furry_dsgg",
     "furryhm",
     "广告助手，帮助你向所有群聊定时发送广告",
-    "v1.0.2",
+    "v1.0.3",
     "https://github.com/furryHM-mrz/astrbot_plugin_furry_dsgg",
 )
 class NobotPlugin(Star):
@@ -35,6 +35,7 @@ class NobotPlugin(Star):
         self.broadcast_message = None
         self.context = context
         self.advertisements = []
+        self.data_dir = StarTools.get_data_dir()
         self.load_advertisements()
         self.scheduled_times = []  # 存储定时时间列表
         self.bot = None  # 保存bot实例
@@ -50,8 +51,8 @@ class NobotPlugin(Star):
     def load_advertisements(self):
         """加载已保存的广告内容"""
         try:
-            if os.path.exists("data/furry_dsgg_ads.json"):
-                with open("data/furry_dsgg_ads.json", "r", encoding="utf-8") as f:
+            if os.path.exists(f"{self.data_dir}/furry_dsgg_ads.json"):
+                with open(f"{self.data_dir}/furry_dsgg_ads.json", "r", encoding="utf-8") as f:
                     self.advertisements = json.load(f)
             else:
                 self.advertisements = []
@@ -62,8 +63,8 @@ class NobotPlugin(Star):
     def save_advertisements(self):
         """保存广告内容到文件"""
         try:
-            os.makedirs("data", exist_ok=True)
-            with open("data/furry_dsgg_ads.json", "w", encoding="utf-8") as f:
+            os.makedirs(self.data_dir, exist_ok=True)
+            with open(f"{self.data_dir}/furry_dsgg_ads.json", "w", encoding="utf-8") as f:
                 json.dump(self.advertisements, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"保存广告内容时出错: {e}")
@@ -71,8 +72,8 @@ class NobotPlugin(Star):
     def load_scheduled_times(self):
         """加载已保存的定时任务时间点"""
         try:
-            if os.path.exists("data/furry_dsgg_schedule.json"):
-                with open("data/furry_dsgg_schedule.json", "r", encoding="utf-8") as f:
+            if os.path.exists(f"{self.data_dir}/furry_dsgg_schedule.json"):
+                with open(f"{self.data_dir}/furry_dsgg_schedule.json", "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self.scheduled_times = [time(t["hour"], t["minute"]) for t in data.get("scheduled_times", [])]
             else:
@@ -84,11 +85,11 @@ class NobotPlugin(Star):
     def save_scheduled_times(self):
         """保存定时任务时间点到文件"""
         try:
-            os.makedirs("data", exist_ok=True)
+            os.makedirs(self.data_dir, exist_ok=True)
             data = {
                 "scheduled_times": [{"hour": t.hour, "minute": t.minute} for t in self.scheduled_times]
             }
-            with open("data/furry_dsgg_schedule.json", "w", encoding="utf-8") as f:
+            with open(f"{self.data_dir}/furry_dsgg_schedule.json", "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"保存定时任务时间点时出错: {e}")

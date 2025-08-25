@@ -11,6 +11,6 @@ help: |
   /定时广告 [时间] - 设置定时发送广告时间，时间格式如: 09:00,14:30（多个时间用逗号分隔）
   /停止广告 - 停止定时发送广告
   /查看广告 <ID>  - 查看具体某个广告的内容
-version: v1.0.2 # 插件版本号。格式：v1.1.1 或者 v1.1
+version: v1.0.3 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: furryhm # 作者
 repo: https://github.com/furryHM-mrz/astrbot_plugin_furry_dsgg # 插件的仓库地址
